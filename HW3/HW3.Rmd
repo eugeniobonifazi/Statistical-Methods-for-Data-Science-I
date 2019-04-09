@@ -1,0 +1,251 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+Here we upload all the packages that we need in our project.
+
+```{r}
+require(tseries, quietly = TRUE)
+library(igraph)
+library(manipulate)
+```
+
+#### Select and organize data 
+
+We considered five different companies for each of the ten Global Industry Classification Standard (gics) sectors. The companies are choosen from the S&P500 list except for the companies of the  "Telecommunications Services" sector for whom it was necessary a web research. The data comes from the YahooFinance website. 
+In order to study the dependency of stock relative performance we'll consider the logarithm of the ratio between each period and the prevous one. This transformation is frequently used by the economists to analize the behaviour af any economical time series and it is a measure of the growth rate between each period considered. So, each element of our matrix of data has the format:
+
+$$ x_{t,j}=\log{\left(\frac{c_{t,j}}{c_{t-1,j}}\right)} $$
+
+In which are taken only the daily closure of each title, covering the period between January 1, 2003 through January 1, 2008.
+
+```{r}
+
+# downlading data from Yahoo Finance
+
+ConsDiscr <- c("AAP", "AMZN", "DRI", "BBY", "CMCSA")    # Consumer Discretionary
+Energy <- c("APC", "ANDV", "APA", "BHGE", "COG")        # Energy
+Financial <- c("AMG", "AFL", "ALL", "AXP", "AIG")       # Financials
+ConsStaples <- c("MO", "ADM", "CPB", "CHD", "CLX")      # Consumer Staples
+TelecomServ <- c("T", "CTL", "VZ", "FTR", "BCE")        # Telecommunications Services
+HealCare <- c("ABT", "BAX", "AET", "A", "ALXN")         # Health Care
+Indus <- c("PWR", "RTN", "RSG", "RHI", "ROK")           # Industrials
+InfoTecn <- c("ACN", "ATVI", "ADBE", "AMD", "AKAM")     # Information Technology
+Materials <- c("APD", "ALB", "AVY", "BLL", "DWDP")      # Materials
+Utilities <- c("AES", "LNT", "AEE", "AEP", "EIX")       # Utilities
+
+
+d <- c(ConsDiscr,Energy, Financial, ConsStaples, TelecomServ, HealCare, Indus, InfoTecn, Materials, Utilities)
+ddata<-matrix(NA, 1258, 50)
+for (i in 1:length(d)){
+ddata[,i] <- suppressWarnings(
+  get.hist.quote(instrument=d[i], start="2003-01-01", end="2008-01-01",
+                 quote= "Close", provider="yahoo", drop=TRUE)
+)
+}
+colnames(ddata)<-d
+
+# here the matrix of data is created (growth rate of the time series)
+
+data_mat<-matrix(NA, 1257, 50)
+for (i in 1:50){
+  data_mat[,i]=diff(log(ddata[,i]))
+}
+
+
+```
+
+
+#### BRIEF EXPLANATION
+
+Now our goal consists in creating a marginal correlation graph using two different assosiation measures in order to check if stocks from the same gics sectors tend to be clustered together. The two different correlation measures we chose are respectively Pearson and Spearman correlation coefficients. 
+We used these cofficients to build the Confidence Intervals (as explained in the "Undirected Graphical Models (at a glance!)" file) with which we created the adjacency matrix that is necessary to create our graph. 
+The nature of the edges in the graph depends on both the chosen significance level of the CI and the threshold level (respectively (1-alpha) and epsilon) that has to be compared to the CI itself. For this reason be built a dynamic plot in order to check whether stocks from the same gics sector tend to interact more with each other depending on different levels of alpha and epsilon and also to check how these relashionships change. 
+In this file we show only static results of the graphs with specific levels of significance and threshold chosen through the dynamic plot. However, we gave also a script file containing another version of the graphs with the dynamic plot. 
+
+
+#### Marginal Correlation Graph (Pearson correlation)
+
+In this first section we create the bootstrap vector of delta (see "Undirected Graphical Models (at a glance!)") estimated resampling with repetition on our matrix of data. 
+
+```{r}
+
+cor_mat=cor(data_mat)
+colnames(cor_mat)<-d
+rownames(cor_mat)<-d
+
+B = 1000
+b_vec = rep(NA, B)
+for (i in 1:B){
+  idx <- sample(1:1257, replace = T)
+  R_star = data_mat[idx, ]
+  delta = sqrt(1257)*max(abs(cor(R_star)-cor(data_mat)))
+  b_vec[i] = delta
+}
+
+F_n = ecdf(b_vec) 
+plot(F_n, col = "blue", xlab = "Bootstrap vector of Delta", ylab = "ECDF", main = "Ecdf of the bootstrap vector")
+```
+
+
+##### Adjacency Matrix and graph creation
+
+Here we implement a function of three parameters (alpha, the matrix of correlation and the threshold level epsilon) called AdjacencyMatrix_Graph. In this function we calculate the confidence intervals respect to the Pearson's correlation coefficient between each couple of companies. Then, we check the following condition: $$[-\epsilon;\epsilon]\cap C_{n,\alpha}=\emptyset $$
+for each correlation value and, if it is satisfied, we put an edge between the two nodes of the graph corrisponding to that companies.
+
+```{r}
+
+AdjacencyMatrix_Graph <- function(alpha, matr, epsi){
+  
+n = nrow(matr)
+m = ncol(matr)
+ad_mat = matrix(NA, n, m)
+t_alpha = quantile(F_n, 1-(alpha/choose(n, 2)))
+
+
+for (i in 1:n){
+  for (j in 1:m){
+    
+    inf_CI = matr[i, j] - t_alpha*(1/sqrt(1257))
+    sup_CI = matr[i, j] + t_alpha*(1/sqrt(1257))
+      
+    if (i==j){ad_mat[i, j]=0}
+    
+    else {
+      if ((inf_CI<=epsi & sup_CI>=epsi) || (inf_CI<= -epsi & sup_CI >=-epsi)){ad_mat[i, j]=0}
+      else {ad_mat[i, j]=1}
+      
+    }
+  
+}
+}
+
+colnames(ad_mat)<-d
+rownames(ad_mat)<-d
+G <- igraph::graph.adjacency(ad_mat, mode = "undirected", diag = F)
+
+igraph::V(G)$color[1:5] <- "dodgerblue3"    # Consumer Discretionary
+igraph::V(G)$color[6:10] <- "gold2"         # Energy
+igraph::V(G)$color[11:15] <- "forestgreen"  # Financials
+igraph::V(G)$color[16:20] <- "lightblue2"   # Consumer Staples
+igraph::V(G)$color[21:25] <- "lightgray"    # Telecommunications Services
+igraph::V(G)$color[26:30] <- "indianred1"   # Health Care
+igraph::V(G)$color[31:35] <- "lightsalmon1" # Industrials
+igraph::V(G)$color[36:40] <- "moccasin"     # Information Technology
+igraph::V(G)$color[41:45] <- "midnightblue" # Materials
+igraph::V(G)$color[46:50] <- "chocolate1"   # Utilities
+
+
+return(plot(G, vertex.size = 10, vertex.label.cex = 0.50, vertex.label.color = "black"))
+
+}
+
+```
+
+We fixed a significance level pretty close to the 95% and we noticed that for values of epsilon close to 0 there are more edges between the different companies. Furthermore, we can see that, increasing the value of epsilon the graph becames more and more rerefied, with very few edges. 
+Anyway the companies belonging respectively to the Energy, Financials and Utilities seem to have the stronger relashionship between them respect to the ones belonging to the other sectors. 
+Also the ones of the Materials sector are connected but in a lower level.
+
+$$ \alpha \simeq 0.05, \epsilon = 0$$
+```{r}
+AdjacencyMatrix_Graph(alpha = 0.05252, cor_mat, epsi = 0)
+```
+$$ \alpha \simeq 0.05, \epsilon = 0.064$$ 
+```{r}
+AdjacencyMatrix_Graph(alpha = 0.05252, cor_mat, epsi = 0.064)
+```
+$$ \alpha \simeq 0.05, \epsilon = 0.131$$ 
+```{r}
+AdjacencyMatrix_Graph(alpha = 0.05252, cor_mat, epsi = 0.131)
+```
+
+#### another correlation measure: Spearman's rho
+
+Here we'll do the same operations but using the Spearman's rho correlation coefficient instead of the Pearson's one. 
+Also the function used are the same, the bootstrap vector of estimated delta and the AdjacencyMatrix_Graph implemented in R for the adjacency matrix and the creation process of the graph.
+
+```{r}
+corr_mat2 <- cor(data_mat, method = "spearman")
+colnames(corr_mat2)<-d
+rownames(corr_mat2)<-d
+
+B = 1000
+b_vec2 = rep(NA, B)
+for (i in 1:B){
+  idx <- sample(1:1257, replace = T)
+  R_star = data_mat[idx, ]
+  delta = sqrt(1257)*max(abs(cor(R_star, method = "spearman")-corr_mat2))
+  b_vec2[i] = delta
+}
+
+F_n2 = ecdf(b_vec2) 
+plot(F_n2, col = "blue", xlab = "Bootstrap vector of Delta", ylab = "ECDF", main = "Ecdf of the bootstrap vector")
+```
+
+
+```{r}
+
+AdjacencyMatrix_Graph <- function(alpha, matr, epsi){
+  
+n = nrow(matr)
+m = ncol(matr)
+ad_mat = matrix(NA, n, m)
+t_alpha = quantile(F_n2, 1-(alpha/choose(n, 2)))
+
+
+for (i in 1:n){
+  for (j in 1:m){
+    
+    inf_CI = matr[i, j] - t_alpha*(1/sqrt(1257))
+    sup_CI = matr[i, j] + t_alpha*(1/sqrt(1257))
+      
+    if (i==j){ad_mat[i, j]=0}
+    
+    else {
+      if ((inf_CI<=epsi & sup_CI>=epsi) || (inf_CI<= -epsi & sup_CI >=-epsi)){ad_mat[i, j]=0}
+      else {ad_mat[i, j]=1}
+      
+    }
+  
+}
+}
+
+colnames(ad_mat)<-d
+rownames(ad_mat)<-d
+G <- igraph::graph.adjacency(ad_mat, mode = "undirected", diag = F)
+
+igraph::V(G)$color[1:5] <- "dodgerblue3"    # Consumer Discretionary
+igraph::V(G)$color[6:10] <- "gold2"         # Energy
+igraph::V(G)$color[11:15] <- "forestgreen"  # Financials
+igraph::V(G)$color[16:20] <- "lightblue2"   # Consumer Staples
+igraph::V(G)$color[21:25] <- "lightgray"    # Telecommunications Services
+igraph::V(G)$color[26:30] <- "indianred1"   # Health Care
+igraph::V(G)$color[31:35] <- "lightsalmon1" # Industrials
+igraph::V(G)$color[36:40] <- "moccasin"     # Information Technology
+igraph::V(G)$color[41:45] <- "midnightblue" # Materials
+igraph::V(G)$color[46:50] <- "chocolate1"   # Utilities
+
+
+return(plot(G, vertex.size = 10, vertex.label.cex = 0.50, vertex.label.color = "black"))
+
+}
+
+
+
+```
+
+First of all we can notice that, respect to pearson's coefficient, we have to increase the epsilon level in order to have a readable graph. As a matter of fact for a same level of epsilon we have a number of edges much more higher.
+On the other hand, also in this case the companies that show an higher relashionship are the ones belonging to the Energy, Financials, Utilities, Materials and also Industrial sectors.
+
+$$ \alpha \simeq 0.05, \epsilon = 0.128$$ 
+```{r}
+AdjacencyMatrix_Graph(alpha = 0.05042, corr_mat2, epsi = 0.128)
+```
+$$ \alpha \simeq 0.05, \epsilon = 0.289$$ 
+```{r}
+AdjacencyMatrix_Graph(alpha = 0.05042, corr_mat2, epsi = 0.289)
+```
+
