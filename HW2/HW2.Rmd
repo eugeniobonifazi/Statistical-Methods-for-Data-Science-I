@@ -1,0 +1,185 @@
+---
+title: "HW 2"
+author: "Eugenio Bonifazi-Giulia Livieri"
+date: "5/12/2017"
+output: html_document
+---
+## Ex 1)
+
+```{r, message=FALSE, warning=FALSE}
+#install.packages("igraph")
+#install.packages("GGally")
+#install.packages("ggplot2")
+#install.packages("sna")
+#install.packages("network")
+#install.packages("intergraph")
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(igraph)
+library(GGally)
+library(ggplot2)
+library(sna)
+library(network)
+library(intergraph)
+```
+
+## ex 2)
+In the following chunck we create the simulation of the graph, adding 1000 nodes starting with 4 pages linked together. The new pages can be linked to the existing ones choosing at random (each node has the same probability of beeing chosen) or with different probabilities, weighted with the number of input links. Since these two ways has the same probabily ($\gamma=0.5$, $1-\gamma=0.5$) of being chosen, we generate a random uniform probability between zero and one for the choise. 
+
+```{r, message=FALSE, warning=FALSE}
+g <- make_empty_graph(n = 4) %>%
+add_edges(c(1,2, 2,3, 3,4, 4,1)) #%>%
+
+for(i in 5:1000){
+  p<-runif(1)
+  nodes<-sum(igraph::degree(g, mode="out"))
+  if(p<=0.5){
+    r<-sample(nodes, 1)
+    g <- add_vertices(g,1)
+    g<-add_edges(g, c(i, r))
+   
+  }
+  else{
+    prob<-(igraph::degree(g, mode = "in")/sum(igraph::degree(g, mode = "in")))
+    r<-sample(nodes, 1, prob = prob)
+    g <- add_vertices(g,1)
+    g<-add_edges(g, c(i, r))
+    
+  }
+  
+}
+
+ggnet2(g, size=1)
+
+```
+
+In this second chunck we simulate a small number of graph (M=5) and for each of them are plotted both the empirical degree distribution of the number of vertices of each degree (point plot) and the complementary cumulative degree distribution (line plot). By default, the cumulative degree distribution in igraph is already complementary. As a matter of fact, as we can see in the plots, the function starts from one and goes to zero instead of the behaviour of the cumulative distribution that increases till one by definition.   
+
+```{r, message=FALSE, warning=FALSE}
+M=5
+for (j in 1:M){
+g <- make_empty_graph(n = 4) %>%
+add_edges(c(1,2, 2,3, 3,4, 4,1)) 
+
+for(i in 5:1000){
+  p<-runif(1)
+  nodes<-sum(igraph::degree(g, mode="out"))
+  if(p<=0.5){
+    r<-sample(nodes, 1)
+    g <- add_vertices(g,1, color = "green")
+    g<-add_edges(g, c(i, r), color="purple")
+   
+  }
+  else{
+    prob<-(igraph::degree(g, mode = "in")/sum(igraph::degree(g, mode = "in")))
+    r<-sample(nodes, 1, prob = prob)
+    g <- add_vertices(g,1, color = "blue")
+    g<-add_edges(g, c(i, r), color="orange")
+    
+  }
+ 
+}
+
+plot(igraph::degree_distribution(g), log="xy")
+plot(igraph::degree_distribution(g, cumulative=TRUE),  type="l")
+
+}
+
+
+```
+
+In order to see if our degree distribution follows a power law or a Poisson, we used the fit_power_law function in R. In this function the Kolmogorov-Smirnov test shows that our distribution is extremely close to a power law.
+
+```{r, message=FALSE, warning=FALSE}
+g <- make_empty_graph(n = 4) %>%
+add_edges(c(1,2, 2,3, 3,4, 4,1)) 
+
+for(i in 5:1000){
+  p<-runif(1)
+  nodes<-sum(igraph::degree(g, mode="out"))
+  if(p<=0.5){
+    r<-sample(nodes, 1)
+    g <- add_vertices(g,1)
+    g<-add_edges(g, c(i, r))
+   
+  }
+  else{
+    prob<-(igraph::degree(g, mode = "in")/sum(igraph::degree(g, mode = "in")))
+    r<-sample(nodes, 1, prob = prob)
+    g <- add_vertices(g,1)
+    g<-add_edges(g, c(i, r))
+    
+  }
+
+}
+d <- igraph::degree(g, mode="in")
+fit1 <- fit_power_law(d+1)
+fit1  
+
+```
+
+## Ex 3)
+
+
+```{r, message=FALSE, warning=FALSE}
+g2 <- make_empty_graph() %>%
+add_vertices(4)%>%
+add_edges(c(1,2, 1,3, 1,4, 2,1, 2,3, 2,4, 3,1, 3,2, 3,4, 4,1, 4,2, 4,3))
+
+for (i in 5:1000){
+  nodes<-length(igraph::degree(g2))
+    p<-runif(1)
+    if(p<=0.5){
+    r<-sample(1:nodes, 3)
+    g2 <- add_vertices(g2,1)
+    for (s in r){
+    g2<-add_edges(g2, c(i, s), color="purple")
+    }
+    }
+  else{
+    prob<-(igraph::degree(g2, mode = "in")/sum(igraph::degree(g2, mode = "in")))
+    r<-sample(1:nodes, 3, prob = prob)
+    g2 <- add_vertices(g2,1)
+    for (s in r){
+    g2<-add_edges(g2, c(i, s), color="orange")
+    }
+  }  
+  }
+ggnet(g2, size = 1)
+
+```
+
+The plots of the degree distribution and the complimentary cumulative degree distribution are pretty close to the ones of the previous exercise. As a consequence, they should follow the behaviour of the power law distribution; as a proof, we repeated the KS test and this shows us that the degree distribution follows the power law too.
+
+```{r, message=FALSE, warning=FALSE}
+g2 <- make_empty_graph() %>%
+add_vertices(4)%>%
+add_edges(c(1,2, 1,3, 1,4, 2,1, 2,3, 2,4, 3,1, 3,2, 3,4, 4,1, 4,2, 4,3))
+
+for (i in 5:1000){
+  nodes<-length(igraph::degree(g2))
+    p<-runif(1)
+    if(p<=0.5){
+    r<-sample(1:nodes, 3)
+    g2 <- add_vertices(g2,1)
+    for (s in r){
+    g2<-add_edges(g2, c(i, s), color="purple")
+    }
+    }
+  else{
+    prob<-(igraph::degree(g2, mode = "in")/sum(igraph::degree(g2, mode = "in")))
+    r<-sample(1:nodes, 3, prob = prob)
+    g2 <- add_vertices(g2,1)
+    for (s in r){
+    g2<-add_edges(g2, c(i, s), color="orange")
+    }
+  }  
+  }
+
+plot(igraph::degree_distribution(g2), log="xy")
+plot(igraph::degree_distribution(g2, cumulative=TRUE),  type="l")
+d <- igraph::degree(g2, mode="in")
+fit1 <- fit_power_law(d+1)
+fit1  
+```
