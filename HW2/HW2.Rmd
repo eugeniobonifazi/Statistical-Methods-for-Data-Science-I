@@ -1,7 +1,5 @@
 ---
 title: "HW 2"
-author: "Eugenio Bonifazi-Giulia Livieri"
-date: "5/12/2017"
 output: html_document
 ---
 ## Ex 1)
