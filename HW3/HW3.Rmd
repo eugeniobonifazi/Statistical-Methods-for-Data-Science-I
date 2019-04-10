@@ -7,7 +7,7 @@ output:
 ---
 Here we upload all the packages that we need in our project.
 
-```{r}
+```{r, echo=FALSE, message=FALSE}
 require(tseries, quietly = TRUE)
 library(igraph)
 library(manipulate)
