@@ -4,7 +4,7 @@ output: html_document
 ---
 ## Ex 1)
 
-```{r, message=FALSE, warning=FALSE}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 #install.packages("igraph")
 #install.packages("GGally")
 #install.packages("ggplot2")
